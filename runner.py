@@ -11,8 +11,7 @@ import sys
 import time
 
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-Executor = ThreadPoolExecutor
-# from concurrent.futures import ProcessPoolExecutor
+Executor = ProcessPoolExecutor
 import numpy as np
 import requests
 from urllib.request import urlopen
@@ -53,7 +52,10 @@ def wait_up(url):
     raise TimeoutError("Never showed up: %s" % url)
 
 def start_proxy(port, api_port, proxy_args=None, proxy_cmd='configurable-http-proxy'):
-    """Start a proxy"""
+    """Start a proxy
+    
+    Returns the proxy's public and API URLs.
+    """
     if proxy_args is None:
         proxy_args = []
     cmd = [proxy_cmd]
@@ -71,12 +73,17 @@ def start_proxy(port, api_port, proxy_args=None, proxy_cmd='configurable-http-pr
 
 
 def add_worker(proxy_api_url, port):
+    """Start a single worker.
+    
+    Returns the worker's URL prefix
+    """
     prefix = '/worker/%i/' % port
     
     worker = Popen([sys.executable, worker_py,
         '--port=%i' % port,
         '--proxy=%s' % proxy_api_url,
         '--prefix=%s' % prefix,
+        '--logging=warn', # info would log every request (could be lots)
     ])
     atexit.register(worker.terminate)
     worker_url = 'http://127.0.0.1:%i' % port
@@ -84,7 +91,11 @@ def add_worker(proxy_api_url, port):
     return prefix
 
 
-def get_going(nworkers=1):
+def bootstrap(nworkers=1):
+    """Start proxy and worker
+    
+    Returns (urls, routes): the proxied URLs and the routing table.
+    """
     ports = random_ports(nworkers)
     proxy_port = 8000 # ports.pop()
     proxy_api_port = 8001 # ports.pop()
@@ -95,41 +106,41 @@ def get_going(nworkers=1):
         urls.append(public_url + prefix)
     r = requests.get(proxy_api_url + '/api/routes')
     r.raise_for_status()
-    pprint(r.json(), sys.stderr)
     return urls, r.json()
 
 
 def single_run(url, delay, size):
-    # url = random.choice(urls)
+    """Time a single http request"""
     tic = time.time()
-    # r = requests.get(url, dict(delay=delay, size=size))
     with urlopen(url) as f:
         f.read()
     toc = time.time()
-    # r.raise_for_status()
     return toc-tic
-    
+
+
 def do_run(urls, n, concurrent=1, delay=0, size=0):
+    """Do a full run.
+    
+    Returns list of timings for samples.
+    """
     with Executor(concurrent) as pool:
-        # urls_s = [urls] * n
         url_repeats = urls * (n // len(urls))
-        # while len(url_repeats)
         delays = [delay] * n
         sizes = [size] * n
         return list(pool.map(single_run, url_repeats, delays, sizes))
 
-def summarize(data, label, reverse=True):
+def summarize(data, label, reverse=False, fmt='%4.f'):
     def percentile(p):
         if reverse:
             p = 100 - p
         return np.percentile(data, p)
     
-    print("{label:10} mean: {mean:4.0f}, 90%: {ninety:4.0f}, 50%: {fifty:4.0f}, 10%: {ten:4.0f}".format(
-        label=label,
-        mean=data.mean(),
-        ninety=percentile(90),
-        fifty=percentile(50),
-        ten=percentile(10),
+    print("{label:10} mean: {mean}, 90%: {ninety}, 50%: {fifty}, 10%: {ten}".format(
+        label = label,
+        mean = fmt % data.mean(),
+        ninety = fmt % percentile(90),
+        fifty = fmt % percentile(50),
+        ten = fmt % percentile(10),
     ))
 
 def report(results):
@@ -137,7 +148,7 @@ def report(results):
     milliseconds = results * 1e3
     requests_per_sec = (1./results).astype(int)
     summarize(requests_per_sec, 'req/sec', reverse=True)
-    summarize(milliseconds, 'ms')
+    summarize(milliseconds, 'ms', fmt='%4.1f')
 
 if __name__ == '__main__':
     import argparse
@@ -150,7 +161,7 @@ if __name__ == '__main__':
     print("Running with {} workers, {} requests ({} concurrent)".format(
         opts.workers, opts.n, opts.c,
     ))
-    urls, routes = get_going(opts.workers)
+    urls, routes = bootstrap(opts.workers)
     raw_urls = [ route['target'] for route in routes.values() ]
     baseline = do_run(raw_urls, opts.n, opts.c)
     results = do_run(urls, opts.n, opts.c)
@@ -162,12 +173,9 @@ if __name__ == '__main__':
     
     print("Proxied")
     report(results)
+    
     if opts.plot:
-        print("ok")
-        import matplotlib
         import matplotlib.pyplot as plt
-        print(matplotlib.get_backend())
-        # plt.ion()
         plt.plot(results, label="Proxied")
         plt.plot(baseline, label="Bypassed")
         plt.ylim(0, max(results) * 1.2)
