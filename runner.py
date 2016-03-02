@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import atexit
+from binascii import hexlify
 import json
 import os
 from pprint import pprint
@@ -9,12 +10,18 @@ import socket
 from subprocess import Popen
 import sys
 import time
+from urllib.request import urlopen
 
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-Executor = ProcessPoolExecutor
+Executor = ThreadPoolExecutor
+# Executor = ProcessPoolExecutor
+
 import numpy as np
 import requests
-from urllib.request import urlopen
+
+from tornado.gen import coroutine
+from tornado.ioloop import IOLoop
+from tornado.websocket import websocket_connect
 
 here = os.path.dirname(__file__)
 worker_py = os.path.join(here, 'worker.py')
@@ -109,7 +116,7 @@ def bootstrap(nworkers=1):
     return urls, r.json()
 
 
-def single_run(url, delay, size):
+def single_run_http(url, delay, size, msgs):
     """Time a single http request"""
     tic = time.time()
     with urlopen(url) as f:
@@ -117,19 +124,47 @@ def single_run(url, delay, size):
     toc = time.time()
     return toc-tic
 
+def single_run_ws(url, delay, size, msgs):
+    """Time a single websocket run"""
+    buf = hexlify(os.urandom(size//2)).decode('ascii')
+    msg = json.dumps({
+        'delay': delay,
+        'data': buf,
+    })
+    loop = IOLoop()
+    @coroutine
+    def go():
+        ws = yield websocket_connect(url.replace('http', 'ws') + '/ws', loop)
+        for i in range(msgs):
+            ws.write_message(msg)
+            yield ws.read_message()
+    tic = time.time()
+    loop.run_sync(go)
+    toc = time.time()
+    return (toc-tic) / msgs
 
-def do_run(urls, n, concurrent=1, delay=0, size=0):
+
+def do_run(urls, n, concurrent=1, delay=0, size=0, msgs=1, ws=False):
     """Do a full run.
     
     Returns list of timings for samples.
     """
+    if ws:
+        single = single_run_ws
+    else:
+        single = single_run_http
     with Executor(concurrent) as pool:
         url_repeats = urls * (n // len(urls))
         delays = [delay] * n
         sizes = [size] * n
-        return list(pool.map(single_run, url_repeats, delays, sizes))
+        msgs = [msgs] * n
+        return list(pool.map(single, url_repeats, delays, sizes, msgs))
 
 def summarize(data, label, reverse=False, fmt='%4.f'):
+    """Summarize results.
+    
+    Prints mean and a few percentiles with some formatting.
+    """
     def percentile(p):
         if reverse:
             p = 100 - p
@@ -153,6 +188,10 @@ def report(results):
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
+    parser.add_argument('--ws', action='store_true', help="Run websocket test instead of http.")
+    parser.add_argument('--msgs', type=int, default=1, help="Number of messages per websocket test.")
+    parser.add_argument('--size', type=int, default=0, help="Size of each websocket messaage (or http reply).")
+    parser.add_argument('--delay', type=float, default=0, help="Artificial delay to add.")
     parser.add_argument('-n', type=int, default=100, help="Number of requests to make.")
     parser.add_argument('-c', type=int, default=1, help="Number of concurrent requests.")
     parser.add_argument('-w', '--workers', type=int, default=1, help="Number of worker processes.")
@@ -163,8 +202,16 @@ if __name__ == '__main__':
     ))
     urls, routes = bootstrap(opts.workers)
     raw_urls = [ route['target'] for route in routes.values() ]
-    baseline = do_run(raw_urls, opts.n, opts.c)
-    results = do_run(urls, opts.n, opts.c)
+    args = dict(
+        n=opts.n, concurrent=opts.c, delay=opts.delay,
+        msgs=opts.msgs, size=opts.size, ws=opts.ws,
+    )
+    baseline = do_run(raw_urls, **args)
+    results = do_run(urls, **args)
+    if opts.ws:
+        print("Websocket test: size: %i, msgs: %i, delay: %.1f" % (opts.size, opts.msgs, opts.delay))
+    else:
+        print("HTTP test: size: %i, delay: %.1f" % (opts.size, opts.delay))
     print("{} workers, {} requests ({} concurrent)".format(
         opts.workers, opts.n, opts.c,
     ))

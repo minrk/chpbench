@@ -34,4 +34,4 @@ The last step should probably be run with something like apache-bench instead of
 ## TODO
 
 - Run on Docker Swarm / kubernetes for real-world multi-node testing.
-- Websocket tests
+- dump results to a file
