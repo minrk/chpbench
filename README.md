@@ -4,6 +4,35 @@ Benchmarking utilities and scripts for configurable-http-proxy.
 
 This consists of two pieces, a worker and a runner.
 
+## running the benchmark
+
+install requirements:
+
+    python3 -m pip install -r requirements.txt
+
+run a test:
+
+    python3 runner.py -w 10 -c 10 -n 1000
+
+```
+usage: runner.py [-h] [--ws] [--msgs MSGS] [--size SIZE] [--delay DELAY]
+                 [-n N] [-c C] [-w WORKERS] [--plot]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --ws                  Run websocket test instead of http.
+  --msgs MSGS           Number of messages per websocket test.
+  --size SIZE           Size of each websocket message (or http reply).
+  --delay DELAY         Artificial delay to add.
+  -n N                  Number of requests to make.
+  -c C                  Number of concurrent requests.
+  -w WORKERS, --workers WORKERS
+                        Number of worker processes.
+  --plot                Show a plot of the results after running.
+```
+
+
+
 ## Worker
 
 worker.py is a simple tornado server that handles HTTP and websocket requests.
