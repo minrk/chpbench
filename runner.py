@@ -103,9 +103,9 @@ def bootstrap(nworkers=1):
     
     Returns (urls, routes): the proxied URLs and the routing table.
     """
-    ports = random_ports(nworkers)
-    proxy_port = 8000 # ports.pop()
-    proxy_api_port = 8001 # ports.pop()
+    ports = random_ports(nworkers + 2)
+    proxy_port = ports.pop()
+    proxy_api_port = ports.pop()
     public_url, proxy_api_url = start_proxy(proxy_port, proxy_api_port)
     urls = []
     for i in range(nworkers):
