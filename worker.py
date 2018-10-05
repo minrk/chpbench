@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """Worker backend for load-testing configurable-http-proxy
 
 Adds itself to the proxy on startup.
@@ -15,8 +15,6 @@ Supports:
 
 import json
 import os
-
-import requests
 
 from tornado import gen, web, options, ioloop
 from tornado.log import app_log

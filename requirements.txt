@@ -1,4 +1,4 @@
 requests
-tornado
+tornado>=5
 numpy
 jupyterhub>=0.9
