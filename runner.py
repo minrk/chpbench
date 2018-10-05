@@ -6,6 +6,7 @@ from binascii import hexlify
 from concurrent.futures import ThreadPoolExecutor
 import inspect
 import json
+import logging
 import os
 import socket
 from subprocess import Popen
@@ -18,10 +19,12 @@ Executor = ThreadPoolExecutor
 # Executor = ProcessPoolExecutor  # uncomment to run in processes instead of threads
 
 from jupyterhub.proxy import ConfigurableHTTPProxy
+from jupyterhub.utils import wait_for_http_server
 import numpy as np
-import requests
 
+from tornado import log
 from tornado.ioloop import IOLoop
+import tornado.options
 from tornado.websocket import websocket_connect
 from traitlets.config import Config
 
@@ -51,18 +54,6 @@ def random_ports(n):
     return ports
 
 
-def wait_up(url):
-    """Wait for a URL to become responsive"""
-    for i in range(100):
-        try:
-            requests.get(url)
-        except requests.exceptions.ConnectionError:
-            time.sleep(0.1)
-        else:
-            return
-    raise TimeoutError("Never showed up: %s" % url)
-
-
 default_config = Config()
 default_config.ConfigurableHTTPProxy.api_url = 'http://127.0.0.1:%i' % tuple(
     random_ports(1)
@@ -83,7 +74,9 @@ async def start_proxy(ProxyClass, port):
     Returns the proxy's public and API URLs.
     """
     proxy_url = 'http://127.0.0.1:%i' % port
-    proxy = ProxyClass(public_url=proxy_url, config=default_config, hub=hub, app=app)
+    proxy = ProxyClass(
+        public_url=proxy_url, config=default_config, hub=hub, app=app, log=log.gen_log
+    )
     f = proxy.start()
     if inspect.isawaitable(f):
         await f
@@ -96,7 +89,7 @@ async def start_proxy(ProxyClass, port):
             loop.run_until_complete(f)
 
     atexit.register(stop)
-    wait_up(proxy_url)
+    await wait_for_http_server(proxy_url)
     return proxy
 
 
@@ -118,7 +111,7 @@ async def add_worker(proxy, port):
     )
     atexit.register(worker.terminate)
     worker_url = 'http://127.0.0.1:%i' % port
-    wait_up(worker_url)
+    await wait_for_http_server(worker_url)
     await proxy.add_route(prefix, worker_url, {})
     return prefix
 
@@ -132,8 +125,12 @@ async def bootstrap(nworkers=1):
     proxy_port = ports.pop()
     proxy = await start_proxy(ConfigurableHTTPProxy, proxy_port)
     urls = []
-    for i in range(nworkers):
-        prefix = await add_worker(proxy, ports.pop())
+    futures = [
+        asyncio.ensure_future(add_worker(proxy, ports.pop())) for i in range(nworkers)
+    ]
+    print("submitted")
+    for f in futures:
+        prefix = await f
         urls.append(proxy.public_url + prefix)
     routes = await proxy.get_all_routes()
     return urls, routes
@@ -158,11 +155,12 @@ def single_run_ws(url, delay, size, msgs):
         for i in range(msgs):
             ws.write_message(msg)
             await ws.read_message()
+
     asyncio.set_event_loop(asyncio.new_event_loop())
     tic = time.time()
     IOLoop.clear_current()
     loop = IOLoop(make_current=True)
-    loop.run_sync(lambda : go())
+    loop.run_sync(go)
     toc = time.time()
     return (toc - tic) / msgs
 
@@ -218,12 +216,12 @@ async def main():
     import argparse
 
     parser = argparse.ArgumentParser()
-    import tornado.options
 
     tornado.options.options.logging = 'info'
-    from tornado import log
-
+    # reset root logger handlers
+    logging.getLogger().handlers = []
     log.enable_pretty_logging()
+
     parser.add_argument(
         '--ws', action='store_true', help="Run websocket test instead of http."
     )
