@@ -30,12 +30,13 @@ class RandomDataCache(dict):
             self[nbytes] = os.urandom(nbytes)
         return self[nbytes]
 
+
 random_data = RandomDataCache()
 
 
 class RandomHandler(web.RequestHandler):
     """TestHandler writes bytes on HTTP"""
-    
+
     @gen.coroutine
     def get(self, path):
         size = int(self.get_argument('size', 0))
@@ -47,7 +48,7 @@ class RandomHandler(web.RequestHandler):
 
 class EchoHandler(WebSocketHandler):
     """EchoHandler is a WebSocketHandler"""
-    
+
     @gen.coroutine
     def on_message(self, message):
         message = json.loads(message)
@@ -58,30 +59,18 @@ class EchoHandler(WebSocketHandler):
 
 
 def main():
-    options.define('proxy', type=str, default='http://127.0.0.1:8001',
-        help="The API URL of the proxy."
-    )
     options.define('port', type=int, default=8888, help="My port.")
     options.define('ip', type=int, default='127.0.0.1', help="My ip.")
     options.define('prefix', type=str, default='', help="My CHP prefix.")
     options.parse_command_line()
-    
+
     opts = options.options
-    
-    app = web.Application([
-        ('.*/ws', EchoHandler),
-        ('(.*)', RandomHandler),
-    ])
+
+    app = web.Application([('.*/ws', EchoHandler), ('(.*)', RandomHandler)])
     app.listen(opts.port)
-    r = requests.post(
-            opts.proxy + '/api/routes' + opts.prefix,
-            data=json.dumps({'target': 'http://%s:%i' % (opts.ip, opts.port)})
-    )
-    r.raise_for_status()
     app_log.info("Running worker at %s:%i", opts.ip, opts.port)
     ioloop.IOLoop.current().start()
 
 
 if __name__ == '__main__':
     main()
-
