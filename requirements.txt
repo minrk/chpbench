@@ -1,6 +1,4 @@
 tornado>=5
 numpy
 jupyterhub>=0.9
-sphinx
-sphinx_bootstrap_theme
-six
+asv
