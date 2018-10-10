@@ -27,6 +27,7 @@ from tornado.ioloop import IOLoop
 import tornado.options
 from tornado.websocket import websocket_connect
 from traitlets.config import Config
+from asv import benchmarks
 
 here = os.path.dirname(__file__)
 worker_py = os.path.join(here, 'worker.py')
@@ -135,17 +136,18 @@ async def bootstrap(nworkers=1):
     routes = await proxy.get_all_routes()
     return urls, routes
 
-
-def single_run_http(url, delay, size, msgs):
-    """Time a single http request"""
-    tic = time.time()
+words = []
+def my_setup(url):
+    global words
     with urlopen(url) as f:
-        f.read()
-    toc = time.time()
-    return toc - tic
+        words = f.readlines()
 
+def time_http():
+    for word in words:
+        word.http()
+time_http.setup = my_setup
 
-def single_run_ws(url, delay, size, msgs):
+def time_ws(url, delay, size, msgs):
     """Time a single websocket run"""
     buf = hexlify(os.urandom(size // 2)).decode('ascii')
     msg = json.dumps({'delay': delay, 'data': buf})
@@ -171,9 +173,9 @@ async def do_run(urls, n, concurrent=1, delay=0, size=0, msgs=1, ws=False):
     Returns list of timings for samples.
     """
     if ws:
-        single = single_run_ws
+        single = time_ws
     else:
-        single = single_run_http
+        single = time_http
     with Executor(concurrent) as pool:
         url_repeats = urls * (n // len(urls))
         delays = [delay] * n
