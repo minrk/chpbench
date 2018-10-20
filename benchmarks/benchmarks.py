@@ -1,5 +1,6 @@
 # Write the benchmarking functions here.
 # See "Writing benchmarks" in the asv docs for more information.
+from .runner import single_run_ws, single_run_http
 
 
 class TimeSuite:
@@ -30,7 +31,15 @@ class TimeSuite:
         for key in xrange(500):
             x = d[key]
 
+    def time_single_run_http(self):
+        pass
+
+    def time_single_run_ws(self):
+        pass
+
 
 class MemSuite:
     def mem_list(self):
         return [0] * 256
+
+

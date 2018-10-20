@@ -27,7 +27,6 @@ from tornado.ioloop import IOLoop
 import tornado.options
 from tornado.websocket import websocket_connect
 from traitlets.config import Config
-from benchmarks.benchmarks import TimeSuite
 
 here = os.path.dirname(__file__)
 worker_py = os.path.join(here, 'worker.py')
@@ -141,20 +140,9 @@ def single_run_http(url, delay, size, msgs):
     """Time a single http request"""
     tic = time.time()
     with urlopen(url) as f:
-    	f.read()
+        f.read()
     toc = time.time()
     return toc - tic
-
-words = []
-def my_setup():
-    global words
-    with single_run_http(url) as f:
-        words = f.readlines()
-
-def time_http():
-    for word in words:
-        word.http()
-time_http.setup = my_setup
 
 
 def single_run_ws(url, delay, size, msgs):
@@ -175,17 +163,6 @@ def single_run_ws(url, delay, size, msgs):
     loop.run_sync(go)
     toc = time.time()
     return (toc - tic) / msgs
-
-words = []
-def my_setup():
-    global words
-    with single_run_ws(url) as f:
-        words = f.readlines()
-
-def time_ws():
-    for word in words:
-        word.ws()
-time_ws.setup = my_setup
 
 
 async def do_run(urls, n, concurrent=1, delay=0, size=0, msgs=1, ws=False):
