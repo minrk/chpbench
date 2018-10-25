@@ -9,4 +9,4 @@ install:
   - npm install --global configurable-http-proxy
 script:
   - asv machine --yes --machine=travis
-  - asv run --python=python --machine=travis
+  - asv dev --python=python --machine=travis
