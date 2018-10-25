@@ -1,45 +1,33 @@
 # Write the benchmarking functions here.
 # See "Writing benchmarks" in the asv docs for more information.
-from .runner import single_run_ws, single_run_http
-
+from .runner import *
 
 class TimeSuite:
     """
     An example benchmark that times the performance of various kinds
     of iterating over dictionaries in Python.
     """
-    def setup(self):
-        self.d = {}
-        for x in range(500):
-            self.d[x] = None
-
-    def time_keys(self):
-        for key in self.d.keys():
-            pass
-
-    def time_iterkeys(self):
-        for key in self.d.iterkeys():
-            pass
-
-    def time_range(self):
-        d = self.d
-        for key in range(500):
-            x = d[key]
-
-    def time_xrange(self):
-        d = self.d
-        for key in xrange(500):
-            x = d[key]
+    def setup(self, nworkers =1):
+        self.ports = random_ports(self.nworkers + 1)
+        self.proxy_port = ports.pop()
+        self.proxy = start_proxy(ConfigurableHTTPProxy, self.proxy_port)
+        self.urls = []
+        self.futures = [
+            asyncio.ensure_future(add_worker(self.proxy, self.ports.pop())) for i in range(self.nworkers)
+        ]
+        print("submitted")
+        for f in self.futures:
+            self.prefix = f
+            self.urls.append(self.proxy.public_url + self.prefix)
+        self.routes = proxy.get_all_routes()
+        return self.urls, self.routes
 
     def time_single_run_http(self):
-        pass
-
+        for url in self.urls:
+           single_run_http(url)
+    
     def time_single_run_ws(self):
-        pass
-
-
-class MemSuite:
-    def mem_list(self):
-        return [0] * 256
+        for url in self.urls:
+            single_run_ws(url)
 
 
