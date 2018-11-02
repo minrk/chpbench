@@ -11,8 +11,9 @@ class TimeSuite:
     def setup(self, nworkers =1):
         ports = random_ports(nworkers + 1)
         proxy_port = ports.pop()
-        proxy = start_proxy(ConfigurableHTTPProxy, proxy_port)
-        asyncio.get_event_loop.run_until_complete(start_proxy)
+        run_sync = asyncio.get_event_loop().run_until_complete
+        proxy = run_sync(start_proxy(ConfigurableHTTPProxy, proxy_port))
+
         self.urls = []
         futures = [
             asyncio.ensure_future(add_worker(proxy, ports.pop())) for i in range(nworkers)
@@ -20,11 +21,9 @@ class TimeSuite:
         print("submitted")
 
         for f in futures:
-            prefix = f
-            result = asyncio.get_event_loop().run_until_complete(f)
+            prefix = run_sync(f)
             self.urls.append(proxy.public_url + prefix)
-        self.routes = proxy.get_all_routes()
-        asyncio.get_event_loop.run_until_complete(get_all_routes)
+        self.routes = run_sync(proxy.get_all_routes())
         return self.urls, self.routes
 
     def time_single_run_http(self):
