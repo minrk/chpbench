@@ -136,16 +136,13 @@ async def bootstrap(nworkers=1):
     return urls, routes
 
 
-def single_run_http(url, delay, size, msgs):
+def single_run_http(url, delay=0, size=0, msgs=1):
     """Time a single http request"""
-    tic = time.time()
     with urlopen(url) as f:
         f.read()
-    toc = time.time()
-    return toc - tic
 
 
-def single_run_ws(url, delay, size, msgs):
+def single_run_ws(url, delay=0, size=0, msgs=1):
     """Time a single websocket run"""
     buf = hexlify(os.urandom(size // 2)).decode('ascii')
     msg = json.dumps({'delay': delay, 'data': buf})
@@ -157,12 +154,9 @@ def single_run_ws(url, delay, size, msgs):
             await ws.read_message()
 
     asyncio.set_event_loop(asyncio.new_event_loop())
-    tic = time.time()
     IOLoop.clear_current()
     loop = IOLoop(make_current=True)
     loop.run_sync(go)
-    toc = time.time()
-    return (toc - tic) / msgs
 
 
 async def do_run(urls, n, concurrent=1, delay=0, size=0, msgs=1, ws=False):

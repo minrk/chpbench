@@ -8,5 +8,5 @@ install:
   - nvm use 6
   - npm install --global configurable-http-proxy
 script:
-  - python runner.py
-  - python runner.py --ws
+  - asv machine --yes --machine=travis
+  - asv dev --python=python --machine=travis
